@@ -7,6 +7,7 @@ return {
       local lint = require 'lint'
       lint.linters_by_ft = {
         markdown = { 'markdownlint' },
+        typescript = { 'eslint_d' },
       }
 
       -- To allow other plugins to add linters to require('lint').linters_by_ft,
@@ -55,6 +56,43 @@ return {
           end
         end,
       })
+      require('lint').linters.eslint_d = {
+        cmd = 'eslint_d',
+        args = {
+          '--format',
+          'json',
+          '--stdin',
+          '--stdin-filename',
+          function()
+            return vim.api.nvim_buf_get_name(0)
+          end,
+        },
+        stream = 'stdout',
+        ignore_exitcode = true,
+        parser = function(output, bufnr)
+          local diagnostics = {}
+          if output == '' then
+            return diagnostics
+          end
+          local data = vim.json.decode(output)
+          if not data or not data[1] or not data[1].messages then
+            return diagnostics
+          end
+          for _, message in ipairs(data[1].messages) do
+            table.insert(diagnostics, {
+              bufnr = bufnr,
+              lnum = message.line - 1,
+              col = message.column - 1,
+              end_lnum = message.endLine and (message.endLine - 1) or message.line - 1,
+              end_col = message.endColumn and (message.endColumn - 1) or message.column - 1,
+              severity = message.severity == 2 and vim.diagnostic.severity.ERROR or vim.diagnostic.severity.WARN,
+              message = string.format('[%s] %s', message.ruleId or 'unknown', message.message),
+              source = 'eslint',
+            })
+          end
+          return diagnostics
+        end,
+      }
     end,
   },
 }
